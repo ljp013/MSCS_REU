@@ -14,16 +14,41 @@
 ## workflowInstall("RNAseq123")
 ## biocLite(c("package names")) to install any packages not initially installed
 
+#this runs everything at once
+main <- function() {
+    #setup libraries
+    library.setup()
+    
+    #data packaging
+    #download tar file
+    ## load.data()
+    
+    genecounts <- initialize.data()
+    
+    #first remove first 11 characters from each file name (GSM ids) to simplify things
+    colnames(genecounts) <- simplify.names(genecounts)
+    
+    #assign cell types and lane numbers
+    genecounts$samples <- group.data(genecounts)
+    
+    #now assign gene ids, symbols, and chromosomes
+    genecounts$genes <- id.genes(genecounts)
+    genecounts
+    
+    #data preprocessing
+}
+
+
 #Setup libraries
 library.setup <- function() {
     library(limma) #modeling functions
     library(Glimma) #interactive modeling functions
     library(edgeR) 
     library(Mus.musculus) #mouse data
+    #should load all required packages
 }
-#should load all required packages
 
-#Data packaging
+
 #Downloading initial data set
 load.data <- function() {
     url <- "https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE63310&format=file"
@@ -55,6 +80,42 @@ initialize.data <- function() {
     #try out class(genecounts) and dim(genecounts) (has 27179 rows and 9 columns)
     #9 files combined
     dim(genecounts)
+    genecounts
 }
 
+simplify.names <- function(x) {
+    samplenames <- substring(colnames(x), 12, nchar(colnames(x)))
+    samplenames
+}
+
+#want further analysis to include amy "experimental variables, both biological and technical, that could have an effect on expression levels"
+#in this sample case, they are comparing gene count and cell type
+#possible cell types: basal, LP, and ML
+#the DGE-list object obtained using the readDGE function above as a "samples data frame
+# that stores both cell type and batch (sequencing lane) information"
+# 3 levels for each (lane 4, 6, or 8) (group Basal, LP, or ML)
+group.data <- function (x) {
+    
+    #now assign cell types
+    group <- as.factor(c("LP", "ML", "Basal", "Basal", "ML", "LP", "Basal", "ML", "LP"))
+    #dollar signs go to that data frame
+    x$samples$group <- group
+    
+    #now assign lanes
+    #rep means repeat first argument number of times specifed in second argument
+    lane <- as.factor(rep(c("L004", "L006", "L008"), c(3,4,2)))
+    x$samples$lane <- lane
+    x$samples
+}
+
+#it is also possible to extract gene ids, symbols, and chromosome names
+# from the Mus.musculus package in the genes data frame of the DGEList-object
+id.genes <- function(genecounts) {
+    geneid <- rownames(genecounts)
+    genes <- select(Mus.musculus, keys=geneid, columns=c("SYMBOL", "TXCHROM"), keytype= "ENTREZID")
+
+    head(genes)
+    #check for and remove duplicated gene ids
+    genes <- genes[!duplicated(genes$ENTREZID),]
+}
 
