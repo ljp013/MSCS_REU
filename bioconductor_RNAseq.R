@@ -61,6 +61,38 @@ main <- function() {
     #unsupervised clustering of samples
     #using multi-dimensional scaling (MDS) plots
     MDS.plots(genecounts)
+    
+    #setting up a design matrix
+    #need to figure out exactly how this works, role in voom function
+    #first simplify labels
+    group <- genecounts$samples$group
+    lane <- genecounts$samples$lane
+    design <- model.matrix(~0+group+lane)
+    colnames(design) <- gsub("group", "", colnames(design))
+    
+    #creates a matrix of "contrasts for pairwise comparisons between cell populations"
+    contr.matrix <- makeContrasts(
+        BasalvsLP = Basal-LP, 
+        BasalvsML = Basal - ML, 
+        LPvsML = LP - ML, 
+        levels = colnames(design))
+    
+    #checking mean-variance trends using voom
+    #also need to understand this better
+    vfit <- voom.mv.plot(genecounts, design, contr.matrix)
+    
+    #finding "number of significantly up- and down-regulated genes"
+    tfit <- find.DE(vfit)
+    
+    #using mean-difference plots to examine individual DE genes
+    basal.vs.lp <- mean.dif(tfit)
+    
+    #creating a heatmap to show subsets of genes
+    #v <- gene.heatmap(basal.vs.lp, genecounts, design)
+    
+    #gene set testing with camera
+    v <- voom(genecounts, design, plot=FALSE)
+    camera.method(v, design, contr.matrix, vfit)
 }
 
 
@@ -253,6 +285,116 @@ MDS.plots <- function(x) {
     
     #Glimma package has interactive option
     #launch=TRUE opens webpage
-    glMDSPlot(lcpm, labels=paste(x$samples$group, x$samples$lane, sep="_"), 
-              groups=x$samples[,c(2,5)], launch=TRUE)
+    ## glMDSPlot(lcpm, labels=paste(x$samples$group, x$samples$lane, sep="_"), 
+    ##         groups=x$samples[,c(2,5)], launch=TRUE)
+}
+
+#compares mean-variance trends using voom (in limma package)
+#x is gene count data
+#design is the design matrix
+#contr.matrix is the contrast matrix
+voom.mv.plot <- function(x, design, contr.matrix) {
+    par(mfrow=c(1,2))
+    v <- voom(x, design, plot=TRUE)
+    
+    vfit <- lmFit(v, design)
+    vfit <- contrasts.fit(vfit, contrasts=contr.matrix)
+    efit <- eBayes(vfit)
+    plotSA(efit, main="Final model: Mean−variance trend")
+    vfit
+}
+
+#find significantly up and/or down-regulated genes
+#significantly usually defined as p-value cutoff at 5%
+#can also be defined as a log-fold-change requirement
+
+find.DE <- function(vfit) {
+    #in this case they set lfc=1, so significant is defined as a 2-fold difference
+    # between cell types
+    tfit <- treat(vfit, lfc=1)
+    #decide tests puts genes in three groups, 0 for not DE, 1 for up-regulated
+    #and -1 for down-regulated
+    dt <- decideTests(tfit)
+    
+    #can find what is in common between the cell type comparisons in decideTests
+    #this is comparing first and second columns, BasalvsLP and BasalvsML
+    de.common <- which(dt[,1]!=0 & dt[,2]!=0)
+    
+    #creating a vennDiagram to show results
+    #basalvsLP is turquoise circle and basalvsML is salmon
+    #only need one graph this time
+    par(mfrow=c(1,1))
+    vennDiagram(dt[,1:2], circle.col=c("turquoise", "salmon"))
+    
+    #can also output comparisons to a text file
+    ## write.fit(tfit, dt, file="results.txt")
+    tfit
+}
+
+#create mean-difference plots using limma and Glimma
+mean.dif <- function(tfit) {
+    #use topTreat (in limma) for tfit (significance based on lfc)
+    #use topTable for efit (significance based on p-value alone)
+    basal.vs.lp <- topTreat(tfit, coef=1, n=Inf)
+    basal.vs.ml <- topTreat(tfit, coef=2, n=Inf)
+    
+    dt <- decideTests(tfit)
+    
+    #limma function
+    #column =1 since this is for basal.vs.lp
+    #shows log-fold-changes between gene expression in basal and lp for each
+    # individual gene, with significantly up-regulated in red
+    # significantly down-regulated in green, rest in black
+    plotMD(tfit, column=1, status=dt[,1], main=colnames(tfit)[1], 
+           xlim=c(-8,13))
+    
+    #Glimma has interactive version
+    #shows individual gene ids
+    ## glMDPlot(tfit, coef=1, status=dt, main=colnames(tfit)[1],
+    ##          id.column="ENTREZID", counts=x$counts, groups=group, launch=FALSE)
+    
+    basal.vs.lp
+}
+
+#creates heatmap showing differences in gene expression across two cell types
+#in this case basal and lp
+gene.heatmap <- function(basal.vs.lp, x, design) {
+    v <- voom(x, design, plot=FALSE)
+    
+    library(gplots)
+    #heatmap of first 100 genes only
+    #plot will be huge, changed to first 10 for readability
+    basal.vs.lp.topgenes <- basal.vs.lp$ENTREZID[1:10]
+    i <- which(v$genes$ENTREZID %in% basal.vs.lp.topgenes)
+    #up-regulated is red, down-regulated is blue, others are white
+    mycol <- colorpanel(1000,"blue","white","red")
+    heatmap.2(v$E[i,], scale="row",
+              labRow=v$genes$SYMBOL[i], labCol=x$samples$group, 
+              col=mycol, trace="none", density.info="none", 
+              margin=c(8,6), lhei=c(2,10), dendrogram="column")
+    
+    v
+}
+
+#v is voom results from gene count data
+camera.method <- function(v, design, contr.matrix, vfit) {
+    load(system.file("extdata", "mouse_c2_v5p1.rda", package = "RNAseq123"))
+    #convert number of rows (genes) into indices
+    idx <- ids2indices(Mm.c2,id=rownames(v))
+    
+    #"The camera function performs a competitive test to assess whether the genes 
+    # in a given set are highly ranked in terms of differential expression 
+    # relative to genes that are not in the set"
+
+    cam.BasalvsLP <- camera(v,idx,design,contrast=contr.matrix[,1])
+    
+    cam.BasalvsML <- camera(v,idx,design,contrast=contr.matrix[,2])
+    
+    cam.LPvsML <- camera(v,idx,design,contrast=contr.matrix[,3])
+    
+    #making a barcodeplot
+    #still need to understand what this is showing exactly
+    efit <- eBayes(vfit)
+    barcodeplot(efit$t[,3], index=idx$LIM_MAMMARY_LUMINAL_MATURE_UP, 
+                index2=idx$LIM_MAMMARY_LUMINAL_MATURE_DN, main="LPvsML")
 }
