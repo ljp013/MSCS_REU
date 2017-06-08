@@ -36,6 +36,31 @@ main <- function() {
     genecounts
     
     #data preprocessing
+    #cpm is counts per million
+    #lcpm is log2 counts per million
+    cpm <- cpm(genecounts)
+    lcpm <- cpm(genecounts, log=TRUE)
+    
+    #removing genes are not expressed in all samples for all cell types
+    #"typically a CPM value of 1 is used [as a cutoff] in our analyses as it separates
+    # expressed genes from unexpressed genes well for most datasets"
+    genecounts <- del.unexpressed(genecounts, cpm)
+    dim(genecounts)
+    
+    #now graph raw (current lcpm) vs filtered (lcpm <- cpm(new genecounts, log = TRUE)) data
+    raw.vs.filtered(genecounts, lcpm, samplenames=colnames(genecounts))
+    
+    #normalising distributions
+    #calcNormFactors function is from edgeR
+    genecounts <- calcNormFactors(genecounts, method="TMM")
+    genecounts$samples$norm.factors
+    
+    #understanding the power of normalising
+    norm.plots(genecounts)
+    
+    #unsupervised clustering of samples
+    #using multi-dimensional scaling (MDS) plots
+    MDS.plots(genecounts)
 }
 
 
@@ -119,3 +144,115 @@ id.genes <- function(genecounts) {
     genes <- genes[!duplicated(genes$ENTREZID),]
 }
 
+#x is genecount data, cpm is counts per million of data
+del.unexpressed <- function(x, cpm) {
+    keep.exprs <- rowSums(cpm>1)>=3
+    x <- x[keep.exprs,, keep.lib.sizes=FALSE]
+    x
+}
+
+#create plot of gene expression density with raw and filtered data
+#x is filtered gene count data, lcpm is the log2 counts per million of unfiltered data
+raw.vs.filtered <- function(x, lcpm, samplenames) {
+    #uses specific color library
+    library(RColorBrewer)
+    #number samples is the number of columns in gene count data
+    nsamples <- ncol(x)
+    #set colors from "paired" set
+    col <- brewer.pal(nsamples, "Paired")
+    #want two plots side by side (so 1 row by 2 col matrix)
+    par(mfrow=c(1,2))
+    #plot density of unfiltered lcpm data for first column (first samples)
+    #use first color, line width of 2, not setting title or x label yet
+    #las=2 sets tick marks perpendicular to the axis
+    plot(density(lcpm[,1]), col=col[1], lwd=2, ylim=c(0,0.21), las=2, 
+         main="", xlab="")
+    #Now set title and x label
+    title(main="A. Raw data", xlab="Log-cpm")
+    #add a line, lty=3 means dotted, v=0 means at 0 (cpm = 1 or lcpm = 0 was the cutoff)
+    abline(v=0, lty=3)
+    #plot density of unfiltered lcpm data for rest of samples
+    #already did 1 so start 2:nsamples
+    for (i in 2:nsamples){
+        den <- density(lcpm[,i])
+        lines(den$x, den$y, col=col[i], lwd=2)
+    }
+    #legend has samplenames, same colors as line colors
+    #bty is type of box, 'n' none or 'o' on
+    legend("topright", samplenames, text.col=col, bty="n")
+    #now find lcpm of filtered data
+    lcpm <- cpm(x, log=TRUE)
+    #and plot that first sample
+    plot(density(lcpm[,1]), col=col[1], lwd=2, ylim=c(0,0.21), las=2, 
+         main="", xlab="")
+    title(main="B. Filtered data", xlab="Log-cpm")
+    #add cutoff line
+    abline(v=0, lty=3)
+    #and the rest of the samples
+    for (i in 2:nsamples){
+        den <- density(lcpm[,i])
+        lines(den$x, den$y, col=col[i], lwd=2)
+    }
+    legend("topright", samplenames, text.col=col, bty="n")
+}
+
+#x is gene count data
+#shows what calcNormFactors function can do
+norm.plots <- function(x) {
+    x2 <- x
+    x2$samples$norm.factors <- 1
+    #first set two sample counts to be anomalous
+    #first sample to 5% of original
+    #second sample to 5x original
+    x2$counts[,1] <- ceiling(x2$counts[,1]*0.05)
+    x2$counts[,2] <- x2$counts[,2]*5
+    
+    #set colors
+    col <- brewer.pal(ncol(x), "Paired")
+    
+    #now plot that vs. normalised version
+    #want 2 graphs side by side
+    par(mfrow=c(1,2))
+    #find lcpm
+    lcpm <- cpm(x2, log=TRUE)
+    #they are using a boxplot this time
+    boxplot(lcpm, las=2, col=col, main="")
+    title(main="A. Example: Unnormalised data",ylab="Log-cpm")
+    
+    #now calculate normalised and plot that
+    x2 <- calcNormFactors(x2)  
+    lcpm <- cpm(x2, log=TRUE)
+    boxplot(lcpm, las=2, col=col, main="")
+    title(main="B. Example: Normalised data",ylab="Log-cpm")
+}
+
+#creates MDS plots grouped by cell types and sequencing lanes
+#uses plotMDS function in limma
+#x is gene count data
+MDS.plots <- function(x) {
+    #find lcpms of data
+    lcpm <- cpm(x, log=TRUE)
+    #want two graphs side by side
+    par(mfrow=c(1,2))
+    #find cell types
+    col.group <- x$samples$group
+    #use colors from set 1
+    levels(col.group) <-  brewer.pal(nlevels(col.group), "Set1")
+    col.group <- as.character(col.group)
+    #find lanes
+    col.lane <- x$samples$lane
+    #use colors from set 2
+    levels(col.lane) <-  brewer.pal(nlevels(col.lane), "Set2")
+    col.lane <- as.character(col.lane)
+    #if you don't specify dimensions assumes 1 and 2
+    plotMDS(lcpm, labels=x$samples$group, col=col.group)
+    title(main="A. Sample groups")
+    #for lanes they specified dimensions 3 and 4
+    plotMDS(lcpm, labels=x$samples$lane, col=col.lane, dim=c(3,4))
+    title(main="B. Sequencing lanes")
+    
+    #Glimma package has interactive option
+    #launch=TRUE opens webpage
+    glMDSPlot(lcpm, labels=paste(x$samples$group, x$samples$lane, sep="_"), 
+              groups=x$samples[,c(2,5)], launch=TRUE)
+}
