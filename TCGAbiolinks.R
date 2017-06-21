@@ -101,19 +101,40 @@ main <- function() {
     #           filter = 'top',
     #           options = list(scrollX = TRUE, keys = TRUE, pageLength = 5), 
     #           rownames = FALSE)
-    
-    #now to find dna methylation in legacy database with two different types of methylation
-    #illumina 450 and ilumina 27
-    query <- GDCquery(project = c("TCGA-GBM","TCGA-LGG"),
-                      legacy = TRUE,
-                      data.category = "DNA methylation",
-                      platform = c("Illumina Human Methylation 450", "Illumina Human Methylation 27"))
-    #once again only getting first 10 rows
-    datatable(getResults(query, rows = 1:10), 
-              filter = 'top',
-              options = list(scrollX = TRUE, keys = TRUE, pageLength = 5), 
-              rownames = FALSE)
-    
+    #
+    # #now to find dna methylation in legacy database with two different types of methylation
+    # #illumina 450 and ilumina 27
+    # query <- GDCquery(project = c("TCGA-GBM","TCGA-LGG"),
+    #                   legacy = TRUE,
+    #                   data.category = "DNA methylation",
+    #                   platform = c("Illumina Human Methylation 450", "Illumina Human Methylation 27"))
+    # #once again only getting first 10 rows
+    # datatable(getResults(query, rows = 1:10), 
+    #           filter = 'top',
+    #           options = list(scrollX = TRUE, keys = TRUE, pageLength = 5), 
+    #           rownames = FALSE)
+    #
+    # 
+    # # actually downloading data
+    # # Gene expression aligned against hg38
+    # # dowloading data from two samples
+    # query <- GDCquery(project = "TCGA-GBM",
+    #                   data.category = "Transcriptome Profiling",
+    #                   data.type = "Gene Expression Quantification", 
+    #                   workflow.type = "HTSeq - FPKM-UQ",
+    #                   barcode = c("TCGA-14-0736-02A-01R-2005-01", "TCGA-06-0211-02A-02R-2005-01"))
+    # GDCdownload(query)
+    # genedata <- GDCprepare(query)
+    # #data on two patient samples
+    # datatable(as.data.frame(colData(genedata)),
+    #           options = list(scrollX = TRUE, keys = TRUE, pageLength = 5),
+    #           rownames = FALSE)
+    # #gene id and expression data for both samples
+    # datatable(assay(genedata)[1:100,],
+    #          options = list(scrollX = TRUE, keys = TRUE, pageLength = 5),
+    #          rownames = TRUE)
+    # 
+    # rowRanges(genedata)
 }
 
 
