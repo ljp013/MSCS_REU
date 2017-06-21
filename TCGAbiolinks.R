@@ -135,6 +135,108 @@ main <- function() {
     #          rownames = TRUE)
     # 
     # rowRanges(genedata)
+    # 
+    # 
+    # #getting clinical data
+    # clinical <- GDCquery_clinic(project = "TCGA-LUAD", type = "clinical")
+    # #and creating a data table
+    # #this is indexed, meaning that only last follow-up data is included
+    # datatable(clinical, filter = 'top', 
+    #           options = list(scrollX = TRUE, keys = TRUE, pageLength = 5),  
+    #           rownames = FALSE)
+    # 
+    # 
+    # #getting clinical data directly from the XML files (not indexed) (LOTS more info)
+    # query <- GDCquery(project = "TCGA-COAD", 
+    #                   data.category = "Clinical", 
+    #                   barcode = c("TCGA-RU-A8FL","TCGA-AA-3972"))
+    # GDCdownload(query)
+    # clinical <- GDCprepare_clinic(query, clinical.info = "patient")
+    # #and creating a data table
+    # datatable(clinical, options = list(scrollX = TRUE, keys = TRUE), rownames = FALSE)
+    # 
+    # #can find drug information for each patient as well
+    # #can also get radiation and admin info, just replace drug with correct term in lines below
+    # clinical.drug <- GDCprepare_clinic(query, clinical.info = "drug")
+    # datatable(clinical.drug, options = list(scrollX = TRUE, keys = TRUE), rownames = FALSE)
+    # 
+    # 
+    # #getting legacy clinical data
+    # #can search for biospecimen data, tissue slide image, clinical supplement, pathology report, and clinical data
+    # #as data.type
+    # # Tissue slide image files
+    # query <- GDCquery(project = "TCGA-COAD", 
+    #                   data.category = "Clinical", 
+    #                   data.type = "Tissue slide image",
+    #                   legacy = TRUE,
+    #                   barcode = c("TCGA-RU-A8FL","TCGA-AA-3972"))
+    # #anddd datatable
+    # query %>% getResults %>% datatable(options = list(scrollX = TRUE, keys = TRUE))
+    # 
+    # #there may be some inconsistencies in clinical data
+    # 
+    # 
+    # #dowloading mutation data for hg38
+    # #"CHOL" is the tumor
+    # #muse is the pipeline
+    # #available pipelines are muse, varscan2, somaticsniper, mutect
+    # maf <- GDCquery_Maf("CHOL", pipelines = "muse")
+    # # Only first 20 to make render faster
+    # datatable(maf[1:20,],
+    #           filter = 'top',
+    #           options = list(scrollX = TRUE, keys = TRUE, pageLength = 5), 
+    #           rownames = FALSE)
+    
+    #downloading mutation data for hg19 (i.e. legacy = TRUE)
+    query.maf.hg19 <- GDCquery(project = "TCGA-CHOL", 
+                               data.category = "Simple nucleotide variation", 
+                               data.type = "Simple somatic mutation",
+                               access = "open", 
+                               legacy = TRUE)
+    # Check maf availables
+    datatable(select(getResults(query.maf.hg19),-contains("cases")),
+              filter = 'top',
+              options = list(scrollX = TRUE, keys = TRUE, pageLength = 10), 
+              rownames = FALSE)
+    #Now download specific files
+    query.maf.hg19 <- GDCquery(project = "TCGA-CHOL", 
+                               data.category = "Simple nucleotide variation", 
+                               data.type = "Simple somatic mutation",
+                               access = "open", 
+                               file.type = "bcgsc.ca_CHOL.IlluminaHiSeq_DNASeq.1.somatic.maf",
+                               legacy = TRUE)
+    GDCdownload(query.maf.hg19)
+    maf <- GDCprepare(query.maf.hg19)
+    #andddd datatable
+    datatable(maf[1:20,],
+              filter = 'top',
+              options = list(scrollX = TRUE, keys = TRUE, pageLength = 5), 
+              rownames = FALSE)
+    
+    #visualizing the data
+    #for this you need library(maftools)
+    #may need to install maftools package
+    #remove silent removes mutations with no/little consequences
+    #useAll = FALSE means only use somatic mutations
+    maf <- GDCquery_Maf("CHOL", pipelines = "muse") %>% read.maf(removeSilent = TRUE, useAll = FALSE)
+    #summarize mutation data
+    datatable(getSampleSummary(maf),
+              filter = 'top',
+              options = list(scrollX = TRUE, keys = TRUE, pageLength = 5), 
+              rownames = FALSE)
+    #remove outliers
+    #include median number of mutations
+    plotmafSummary(maf = maf, rmOutlier = TRUE, addStat = 'median', dashboard = TRUE)
+    
+    oncoplot(maf = maf, top = 10, removeNonMutated = TRUE)
+    #useSyn means use synonomous mutations
+    #ti is transitions, tv is transversions
+    #ti means subsitute purine for other purine or pyrimidine for other pyrimidine
+    #aka A/G and C/T
+    #tv means purine to pyrimidine or vice versa
+    titv = titv(maf = maf, plot = FALSE, useSyn = TRUE)
+    #plot titv summary
+    plotTiTv(res = titv)
 }
 
 
