@@ -58,3 +58,39 @@ miR.num <- intersect(substr(getResults(query.miR, cols = "cases"), 1, 12), subst
 
 #patients with all
 common.patients <- intersect(met.exp, miR.num)
+
+#second part of assignment
+#find number of normal samples
+#and solid tumor samples
+#that satisfy the above conditions
+
+#finding dna methylation solid tumor samples
+tumors.met <- GDCquery(project= "TCGA-KIRP", data.category= "DNA Methylation", barcode = common.patients, sample.type = c("Primary solid Tumor", "Recurrent Solid Tumor"))
+
+#finding gene expression solid tumor samples
+tumors.exp <- GDCquery(project= "TCGA-KIRP", data.category= "Transcriptome Profiling", barcode = common.patients, sample.type = c("Primary solid Tumor", "Recurrent Solid Tumor"))
+
+#finding copy number variation solid tumor samples
+tumors.num <- GDCquery(project= "TCGA-KIRP", data.category= "Copy Number Variation", barcode = common.patients, sample.type = c("Primary solid Tumor", "Recurrent Solid Tumor"))
+
+#finding dna methylation normal samples
+normal.met <- GDCquery(project= "TCGA-KIRP", data.category= "DNA Methylation", barcode = common.patients, sample.type = c("Blood Derived Normal", "Solid Tissue Normal", "Buccal Cell Normal", "EBV Immortalized Normal", "Bone Marrow Normal"))
+
+#finding gene expression normal samples
+normal.exp <- GDCquery(project= "TCGA-KIRP", data.category= "Transcriptome Profiling", barcode = common.patients, sample.type = c("Blood Derived Normal", "Solid Tissue Normal", "Buccal Cell Normal", "EBV Immortalized Normal", "Bone Marrow Normal"))
+
+#finding copy number variation normal samples
+normal.num <- GDCquery(project= "TCGA-KIRP", data.category= "Copy Number Variation", barcode = common.patients, sample.type = c("Blood Derived Normal", "Solid Tissue Normal", "Buccal Cell Normal", "EBV Immortalized Normal", "Bone Marrow Normal"))
+
+
+#now finding intersections
+tumors.exp.met <- intersect(substr(getResults(tumors.met, cols = "cases"), 1, 15), substr(getResults(tumors.exp, cols = "cases"), 1, 15))
+
+tumors <- intersect(substr(getResults(tumors.num, cols = "cases"), 1, 15), tumors.exp.met)
+
+#now for normal samples
+normal.exp.met <- intersect(substr(getResults(normal.met, cols = "cases"), 1, 15), substr(getResults(normal.exp, cols = "cases"), 1, 15)) 
+
+normal <- intersect(substr(getResults(normal.num, cols = "cases"), 1, 15), normal.exp.met)
+
+#results: 274 tumor samples and 22 normal samples
